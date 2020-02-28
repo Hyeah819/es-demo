@@ -1,11 +1,26 @@
 package com.newstar.pojo;
 
+
 import com.newstar.repository.ItemRepository;
+import org.elasticsearch.index.query.MatchQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.aggregations.Aggregation;
+import org.elasticsearch.search.aggregations.AggregationBuilders;
+import org.elasticsearch.search.aggregations.Aggregations;
+import org.elasticsearch.search.aggregations.bucket.terms.StringTerms;
+import org.elasticsearch.search.sort.SortBuilders;
+import org.elasticsearch.search.sort.SortOrder;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.elasticsearch.core.ElasticsearchTemplate;
+import org.springframework.data.elasticsearch.core.aggregation.AggregatedPage;
+import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
+import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.test.context.junit4.SpringRunner;
 import sun.reflect.generics.tree.VoidDescriptor;
 
@@ -52,4 +67,49 @@ public class EsTest {
             System.out.println("============="+item);
         }
     }
+    @Test
+    public void testQuery(){
+        //创建查询构建起
+        NativeSearchQueryBuilder queryBuilder = new NativeSearchQueryBuilder();
+        //结果过滤
+        queryBuilder.withSourceFilter(new FetchSourceFilter(new String[]{"id","title","price"},null));
+        //添加查询条件
+        queryBuilder.withQuery(QueryBuilders.matchQuery("title","小米手机"));
+        //排序
+        queryBuilder.withSort(SortBuilders.fieldSort("price").order(SortOrder.DESC));
+        //分页(页码从0开始）
+        queryBuilder.withPageable(PageRequest.of(0,2));
+        //build()方法就是创建该对象吧
+        Page<Item> search = repository.search(queryBuilder.build());
+
+        long totalElements = search.getTotalElements();
+        System.out.println("totalElements"+totalElements);
+        int totalPages = search.getTotalPages();
+        System.out.println("totalPages"+totalPages);
+        List<Item> content = search.getContent();
+        for (Item item : content) {
+            System.out.println("item"+item);
+        }
+    }
+    @Test
+    public void testAgg(){
+        NativeSearchQueryBuilder queryBuilder = new NativeSearchQueryBuilder();
+        String aggName = "popularBrand";
+        //聚合
+        queryBuilder.addAggregation(AggregationBuilders.terms(aggName).field("brand"));
+        //查询并返回带聚合结果
+        AggregatedPage<Item> result = elasticsearchTemplate.queryForPage(queryBuilder.build(), Item.class);
+
+        //解析聚合
+        Aggregations aggregations = result.getAggregations();
+        //获取指定名称的聚合
+        StringTerms aggregation = aggregations.get(aggName);
+        //获取桶
+        List<StringTerms.Bucket> buckets = aggregation.getBuckets();
+        for (StringTerms.Bucket bucket : buckets) {
+            System.out.println("KEY="+bucket.getKeyAsString());
+            System.out.println("docCount = "+bucket.getDocCount());
+        }
+    }
+
 }
